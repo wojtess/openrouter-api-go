@@ -90,6 +90,29 @@ func main() {
 
 ```
 
+### Router Agent
+
+The `router_agent.go` file introduces a `RouterAgent`.  The `RouterAgent` simplifies the API for processing requests, abstracting away the need to manage channels and context directly for streaming requests.
+
+#### RouterAgent Example
+
+```go
+client := openrouterapigo.NewOpenRouterClient("YOUR_OPENROUTER_API_KEY")
+agent := openrouterapigo.NewRouterAgent(client, "your-model", openrouterapigo.RouterAgentConfig{})
+response, err := agent.Completion("your prompt")
+// or for streaming
+agent.CompletionStream("your prompt", outputChan, processingChan, errChan, ctx)
+```
+
+#### RouterAgentChat Example
+```go
+client := openrouterapigo.NewOpenRouterClient("YOUR_OPENROUTER_API_KEY")
+agent := openrouterapigo.NewRouterAgentChat(client, "your-model", openrouterapigo.RouterAgentConfig{}, "Initial system prompt")
+agent.Chat("First message")
+agent.Chat("Second message")
+// Access the conversation history via agent.Messages
+```
+
 ### Specifying Model
 
 You can specify a specific model to use with the `Model` field in the `Request` struct.  If no model is specified, OpenRouter will select a default model.
