@@ -27,6 +27,7 @@ type Request struct {
 	Models            []string             `json:"models,omitempty"`
 	Route             string               `json:"route,omitempty"`
 	Provider          *ProviderPreferences `json:"provider,omitempty"`
+	IncludeReasoning  bool                 `json:"include_reasoning,omitempty"`
 }
 
 // ResponseFormat represents the response format structure.
@@ -130,12 +131,14 @@ type Choice struct {
 type MessageResponse struct {
 	Content   string     `json:"content"`
 	Role      string     `json:"role"`
+	Reasoning string     `json:"reasoning,omitempty"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 type Delta struct {
 	Content   string     `json:"content"`
 	Role      string     `json:"role,omitempty"`
+	Reasoning string     `json:"reasoning,omitempty"`
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
