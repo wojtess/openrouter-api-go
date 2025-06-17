@@ -189,10 +189,16 @@ func (agent *RouterAgentChat) Chat(message string) error {
 
 	response, err := agent.client.FetchChatCompletions(request)
 
+	if err != nil {
+		// rollback user message
+		agent.Messages = agent.Messages[:len(agent.Messages)-1]
+		return err
+	}
+
 	agent.Messages = append(agent.Messages, MessageRequest{
 		Role:    RoleAssistant,
 		Content: response.Choices[0].Message.Content,
 	})
 
-	return err
+	return nil
 }
