@@ -3,13 +3,14 @@ package openrouterapigo_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	openrouterapigo "github.com/wojtess/openrouter-api-go"
 )
 
 func TestFetchChatCompletions(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient("YOUR_TOKEN")
+	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
 
 	request := openrouterapigo.Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
@@ -21,13 +22,14 @@ func TestFetchChatCompletions(t *testing.T) {
 	output, err := client.FetchChatCompletions(request)
 	if err != nil {
 		t.Errorf("error %v", err)
+		return
 	}
 
 	t.Logf("output: %v", output.Choices[0].Message.Content)
 }
 
 func TestFetchChatCompletionsStreaming(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient("YOUR_TOKEN")
+	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
 
 	request := openrouterapigo.Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
@@ -67,7 +69,7 @@ func TestFetchChatCompletionsStreaming(t *testing.T) {
 }
 
 func TestFetchChatCompletionsAgentStreaming(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient("YOUR_TOKEN")
+	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
 	agent := openrouterapigo.NewRouterAgent(client, "meta-llama/llama-3.2-1b-instruct", openrouterapigo.RouterAgentConfig{
 		Temperature: 0.7,
 		MaxTokens:   100,
@@ -108,7 +110,7 @@ func TestFetchChatCompletionsAgentStreaming(t *testing.T) {
 }
 
 func TestFetchChatCompletionsAgentSimpleChat(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient("YOUR_TOKEN")
+	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
 	agent := openrouterapigo.NewRouterAgentChat(client, "meta-llama/llama-3.2-1b-instruct", openrouterapigo.RouterAgentConfig{
 		Temperature: 0.0,
 		MaxTokens:   100,
