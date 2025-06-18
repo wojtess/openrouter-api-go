@@ -180,7 +180,7 @@ func TestFetchChatCompletionsAgentSimpleChatWithPDF(t *testing.T) {
 		}
 		content1, ok := msg.Content.([]openrouterapigo.ContentPart)
 		if ok {
-			//Assumption is that text is on index 0 and image is on index 1..n
+			//Assumption is that text is on index 0 and pdfs are on index 1..n
 			t.Logf(string(msg.Role) + ": " + string(content1[0].Text))
 		}
 	}
