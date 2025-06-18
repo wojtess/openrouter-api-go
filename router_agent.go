@@ -1,6 +1,10 @@
 package openrouterapigo
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"image"
+)
 
 type RouterAgentConfig struct {
 	ResponseFormat    *ResponseFormat `json:"response_format,omitempty"`
@@ -8,7 +12,7 @@ type RouterAgentConfig struct {
 	MaxTokens         int             `json:"max_tokens,omitempty"`
 	Temperature       float64         `json:"temperature,omitempty"`
 	Tools             []Tool          `json:"tools,omitempty"`
-	ToolChoice        ToolChoice      `json:"tool_choice,omitempty"`
+	ToolChoice        *ToolChoice     `json:"tool_choice,omitempty"`
 	Seed              int             `json:"seed,omitempty"`
 	TopP              float64         `json:"top_p,omitempty"`
 	TopK              int             `json:"top_k,omitempty"`
@@ -165,6 +169,136 @@ func (agent *RouterAgentChat) Chat(message string) error {
 		Role:    RoleUser,
 		Content: message,
 	})
+	request := Request{
+		Messages:          agent.Messages,
+		Model:             agent.model,
+		ResponseFormat:    agent.config.ResponseFormat,
+		Stop:              agent.config.Stop,
+		MaxTokens:         agent.config.MaxTokens,
+		Temperature:       agent.config.Temperature,
+		Tools:             agent.config.Tools,
+		ToolChoice:        agent.config.ToolChoice,
+		Seed:              agent.config.Seed,
+		TopP:              agent.config.TopP,
+		TopK:              agent.config.TopK,
+		FrequencyPenalty:  agent.config.FrequencyPenalty,
+		PresencePenalty:   agent.config.PresencePenalty,
+		RepetitionPenalty: agent.config.RepetitionPenalty,
+		LogitBias:         agent.config.LogitBias,
+		TopLogprobs:       agent.config.TopLogprobs,
+		MinP:              agent.config.MinP,
+		TopA:              agent.config.TopA,
+		Stream:            false,
+	}
+
+	response, err := agent.client.FetchChatCompletions(request)
+
+	if err != nil {
+		// rollback user message
+		agent.Messages = agent.Messages[:len(agent.Messages)-1]
+		return err
+	}
+
+	agent.Messages = append(agent.Messages, MessageRequest{
+		Role:    RoleAssistant,
+		Content: response.Choices[0].Message.Content,
+	})
+
+	return nil
+}
+
+// https://openrouter.ai/docs/features/images-and-pdfs
+func (agent *RouterAgentChat) ChatWithImage(message string, imgs ...image.Image) error {
+	contentList := make([]ContentPart, 0, len(imgs)+1)
+	contentList = append(contentList, ContentPart{
+		Type: ContentTypeText,
+		Text: message,
+	})
+	for _, img := range imgs {
+		encodedImage, err := encodeImageToBase64(img)
+		contentList = append(contentList, ContentPart{
+			Type: ContentTypeImage,
+			ImageURL: &ImageURL{
+				URL: fmt.Sprintf("data:image/jpeg;base64,%s", encodedImage),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	agent.Messages = append(
+		agent.Messages,
+		MessageRequest{
+			Role:    RoleUser,
+			Content: contentList,
+		})
+
+	request := Request{
+		Messages:          agent.Messages,
+		Model:             agent.model,
+		ResponseFormat:    agent.config.ResponseFormat,
+		Stop:              agent.config.Stop,
+		MaxTokens:         agent.config.MaxTokens,
+		Temperature:       agent.config.Temperature,
+		Tools:             agent.config.Tools,
+		ToolChoice:        agent.config.ToolChoice,
+		Seed:              agent.config.Seed,
+		TopP:              agent.config.TopP,
+		TopK:              agent.config.TopK,
+		FrequencyPenalty:  agent.config.FrequencyPenalty,
+		PresencePenalty:   agent.config.PresencePenalty,
+		RepetitionPenalty: agent.config.RepetitionPenalty,
+		LogitBias:         agent.config.LogitBias,
+		TopLogprobs:       agent.config.TopLogprobs,
+		MinP:              agent.config.MinP,
+		TopA:              agent.config.TopA,
+		Stream:            false,
+	}
+
+	response, err := agent.client.FetchChatCompletions(request)
+
+	if err != nil {
+		// rollback user message
+		agent.Messages = agent.Messages[:len(agent.Messages)-1]
+		return err
+	}
+
+	agent.Messages = append(agent.Messages, MessageRequest{
+		Role:    RoleAssistant,
+		Content: response.Choices[0].Message.Content,
+	})
+
+	return nil
+}
+
+func (agent *RouterAgentChat) ChatWithPDF(message string, pathsToPdf ...string) error {
+	contentList := make([]ContentPart, 0, len(pathsToPdf)+1)
+	contentList = append(contentList, ContentPart{
+		Type: ContentTypeText,
+		Text: message,
+	})
+	for _, pdf_path := range pathsToPdf {
+		encodedPdf, err := encodePDFToBase64(pdf_path)
+		contentList = append(contentList, ContentPart{
+			Type: ContentTypePDF,
+			File: &FileURL{
+				Filename: pdf_path,
+				FileData: fmt.Sprintf("data:application/pdf;base64,%s", encodedPdf),
+			},
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	agent.Messages = append(
+		agent.Messages,
+		MessageRequest{
+			Role:    RoleUser,
+			Content: contentList,
+		})
+
 	request := Request{
 		Messages:          agent.Messages,
 		Model:             agent.model,

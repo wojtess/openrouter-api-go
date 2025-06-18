@@ -3,7 +3,9 @@ package openrouterapigo_test
 import (
 	"context"
 	"fmt"
+	"image"
 	"os"
+	"path"
 	"testing"
 
 	openrouterapigo "github.com/wojtess/openrouter-api-go"
@@ -123,6 +125,63 @@ func TestFetchChatCompletionsAgentSimpleChat(t *testing.T) {
 		content, ok := msg.Content.(string)
 		if ok {
 			t.Logf(string(msg.Role) + ": " + string(content))
+		}
+	}
+}
+
+func TestFetchChatCompletionsAgentSimpleChatWithImage(t *testing.T) {
+	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := openrouterapigo.NewRouterAgentChat(client, "google/gemma-3-27b-it" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, openrouterapigo.RouterAgentConfig{
+		Temperature: 0.0,
+		MaxTokens:   100,
+	}, "You are helpful asistant")
+
+	file, err := os.Open(path.Join("data_for_test", "hello_world.png"))
+	if err != nil {
+		t.Errorf("Error while opening file: %s", err)
+		return
+	}
+	img, _, err := image.Decode(file)
+	if err != nil {
+		t.Errorf("Error while decoding image: %s", err)
+		return
+	}
+
+	agent.ChatWithImage("What is in image?", img)
+
+	for _, msg := range agent.Messages {
+		content, ok := msg.Content.(string)
+		if ok {
+			t.Logf(string(msg.Role) + ": " + string(content))
+			continue
+		}
+		content1, ok := msg.Content.([]openrouterapigo.ContentPart)
+		if ok {
+			//Assumption is that text is on index 0 and image is on index 1..n
+			t.Logf(string(msg.Role) + ": " + string(content1[0].Text))
+		}
+	}
+}
+
+func TestFetchChatCompletionsAgentSimpleChatWithPDF(t *testing.T) {
+	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := openrouterapigo.NewRouterAgentChat(client, "google/gemma-3-27b-it" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, openrouterapigo.RouterAgentConfig{
+		Temperature: 0.0,
+		MaxTokens:   100,
+	}, "You are helpful asistant")
+
+	agent.ChatWithPDF("What is in image?", path.Join("data_for_test", "tex_sample.pdf"))
+
+	for _, msg := range agent.Messages {
+		content, ok := msg.Content.(string)
+		if ok {
+			t.Logf(string(msg.Role) + ": " + string(content))
+			continue
+		}
+		content1, ok := msg.Content.([]openrouterapigo.ContentPart)
+		if ok {
+			//Assumption is that text is on index 0 and image is on index 1..n
+			t.Logf(string(msg.Role) + ": " + string(content1[0].Text))
 		}
 	}
 }

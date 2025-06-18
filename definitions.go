@@ -11,7 +11,7 @@ type Request struct {
 	MaxTokens         int                  `json:"max_tokens,omitempty"`
 	Temperature       float64              `json:"temperature,omitempty"`
 	Tools             []Tool               `json:"tools,omitempty"`
-	ToolChoice        ToolChoice           `json:"tool_choice,omitempty"`
+	ToolChoice        *ToolChoice          `json:"tool_choice,omitempty"`
 	Seed              int                  `json:"seed,omitempty"`
 	TopP              float64              `json:"top_p,omitempty"`
 	TopK              int                  `json:"top_k,omitempty"`
@@ -28,6 +28,16 @@ type Request struct {
 	Route             string               `json:"route,omitempty"`
 	Provider          *ProviderPreferences `json:"provider,omitempty"`
 	IncludeReasoning  bool                 `json:"include_reasoning,omitempty"`
+	Plugins           []Plugin             `json:"plugins,omitempty"`
+}
+
+type Plugin struct {
+	Id  int       `json:"id"`
+	Pdf PdfPlugin `json:"pdf"`
+}
+
+type PdfPlugin struct {
+	Engine string `json:"engine"`
 }
 
 // ResponseFormat represents the response format structure.
@@ -61,6 +71,7 @@ const (
 	RoleSystem    MessageRole = "system"
 	RoleUser      MessageRole = "user"
 	RoleAssistant MessageRole = "assistant"
+	RoleTool      MessageRole = "tool"
 )
 
 // ContentPart represents the content part structure.
@@ -68,6 +79,7 @@ type ContentPart struct {
 	Type     ContnetType `json:"type"`
 	Text     string      `json:"text,omitempty"`
 	ImageURL *ImageURL   `json:"image_url,omitempty"`
+	File     *FileURL    `json:"file,omitempty"`
 }
 
 type ContnetType string
@@ -75,7 +87,13 @@ type ContnetType string
 const (
 	ContentTypeText  ContnetType = "text"
 	ContentTypeImage ContnetType = "image_url"
+	ContentTypePDF   ContnetType = "file"
 )
+
+type FileURL struct {
+	Filename string `json:"filename"`
+	FileData string `json:"file_data"`
+}
 
 // ImageURL represents the image URL structure.
 type ImageURL struct {
