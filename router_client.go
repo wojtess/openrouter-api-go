@@ -64,13 +64,13 @@ func (c *OpenRouterClient) FetchChatCompletions(request Request) (*Response, err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
 	output, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%d: %s", resp.StatusCode, output)
 	}
 
 	outputReponse := &Response{}
