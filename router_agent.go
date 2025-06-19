@@ -2,6 +2,7 @@ package openrouterapigo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 )
@@ -143,9 +144,19 @@ func (agent RouterAgent) ChatStream(messages []MessageRequest, outputChan chan R
 	agent.client.FetchChatCompletionsStream(request, outputChan, processingChan, errChan, ctx)
 }
 
+type message interface {
+	GetRole() MessageRole
+	GetContentPart() []ContentPart
+	GetToolCalls() []ToolCall
+	GetReasoning() string
+	GetToolCallId() string
+	GetName() string
+}
+
 type RouterAgentChat struct {
 	RouterAgent
-	Messages []MessageRequest
+	Messages     []message
+	ToolRegistry ToolRegistry
 }
 
 func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAgentConfig, system_prompt string) RouterAgentChat {
@@ -155,12 +166,57 @@ func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAge
 			model:  model,
 			config: config,
 		},
-		Messages: []MessageRequest{
-			{
+		Messages: []message{
+			MessageRequest{
 				Role:    RoleSystem,
 				Content: system_prompt,
 			},
 		},
+		ToolRegistry: *NewToolRegistry(),
+	}
+}
+
+func AddToolToAgent[T any](agent *RouterAgentChat, definition ToolDefinition[T]) {
+	agent.ToolRegistry.Register(toolWrapper[T]{
+		definition: definition,
+	})
+}
+
+func (agent *RouterAgentChat) generateMessagesForRequest() []MessageRequest {
+	messages := make([]MessageRequest, 0, len(agent.Messages))
+	for _, msg := range agent.Messages {
+		messages = append(messages, MessageRequest{
+			Role:       msg.GetRole(),
+			Content:    msg.GetContentPart(),
+			ToolCallID: msg.GetToolCallId(),
+		})
+	}
+	return messages
+}
+
+func (agent *RouterAgentChat) callTools(response *Response) {
+	for _, tool := range response.Choices[0].Message.ToolCalls {
+		toolOutput, err := agent.ToolRegistry.CallTool(tool.Function.Name, json.RawMessage(tool.Function.Arguments))
+		type errorOutput struct {
+			Err string `json:"error"`
+		}
+		if err != nil {
+			toolOutputByte, _ := json.Marshal(errorOutput{
+				Err: fmt.Sprintf("%s", err),
+			})
+			toolOutput = string(toolOutputByte)
+		}
+		agent.Messages = append(agent.Messages, MessageRequest{
+			Role: RoleTool,
+			Content: []ContentPart{
+				{
+					Type: ContentTypeText,
+					Text: toolOutput,
+				},
+			},
+			ToolCallID: tool.ID,
+			Name:       tool.Function.Name,
+		})
 	}
 }
 
@@ -169,14 +225,19 @@ func (agent *RouterAgentChat) Chat(message string) error {
 		Role:    RoleUser,
 		Content: message,
 	})
+	tools, err := agent.ToolRegistry.GenerateTools()
+	if err != nil {
+		return fmt.Errorf("error while generating tools: %s", err)
+	}
+
 	request := Request{
-		Messages:          agent.Messages,
+		Messages:          agent.generateMessagesForRequest(),
 		Model:             agent.model,
 		ResponseFormat:    agent.config.ResponseFormat,
 		Stop:              agent.config.Stop,
 		MaxTokens:         agent.config.MaxTokens,
 		Temperature:       agent.config.Temperature,
-		Tools:             agent.config.Tools,
+		Tools:             tools,
 		ToolChoice:        agent.config.ToolChoice,
 		Seed:              agent.config.Seed,
 		TopP:              agent.config.TopP,
@@ -199,10 +260,9 @@ func (agent *RouterAgentChat) Chat(message string) error {
 		return err
 	}
 
-	agent.Messages = append(agent.Messages, MessageRequest{
-		Role:    RoleAssistant,
-		Content: response.Choices[0].Message.Content,
-	})
+	agent.Messages = append(agent.Messages, response.Choices[0].Message)
+
+	agent.callTools(response)
 
 	return nil
 }
@@ -234,14 +294,19 @@ func (agent *RouterAgentChat) ChatWithImage(message string, imgs ...image.Image)
 			Content: contentList,
 		})
 
+	tools, err := agent.ToolRegistry.GenerateTools()
+	if err != nil {
+		return fmt.Errorf("error while generating tools: %s", err)
+	}
+
 	request := Request{
-		Messages:          agent.Messages,
+		Messages:          agent.generateMessagesForRequest(),
 		Model:             agent.model,
 		ResponseFormat:    agent.config.ResponseFormat,
 		Stop:              agent.config.Stop,
 		MaxTokens:         agent.config.MaxTokens,
 		Temperature:       agent.config.Temperature,
-		Tools:             agent.config.Tools,
+		Tools:             tools,
 		ToolChoice:        agent.config.ToolChoice,
 		Seed:              agent.config.Seed,
 		TopP:              agent.config.TopP,
@@ -299,14 +364,19 @@ func (agent *RouterAgentChat) ChatWithPDF(message string, pathsToPdf ...string) 
 			Content: contentList,
 		})
 
+	tools, err := agent.ToolRegistry.GenerateTools()
+	if err != nil {
+		return fmt.Errorf("error while generating tools: %s", err)
+	}
+
 	request := Request{
-		Messages:          agent.Messages,
+		Messages:          agent.generateMessagesForRequest(),
 		Model:             agent.model,
 		ResponseFormat:    agent.config.ResponseFormat,
 		Stop:              agent.config.Stop,
 		MaxTokens:         agent.config.MaxTokens,
 		Temperature:       agent.config.Temperature,
-		Tools:             agent.config.Tools,
+		Tools:             tools,
 		ToolChoice:        agent.config.ToolChoice,
 		Seed:              agent.config.Seed,
 		TopP:              agent.config.TopP,

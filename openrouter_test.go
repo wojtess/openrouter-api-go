@@ -1,4 +1,4 @@
-package openrouterapigo_test
+package openrouterapigo
 
 import (
 	"context"
@@ -7,17 +7,15 @@ import (
 	"os"
 	"path"
 	"testing"
-
-	openrouterapigo "github.com/wojtess/openrouter-api-go"
 )
 
 func TestFetchChatCompletions(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
 
-	request := openrouterapigo.Request{
+	request := Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
-		Messages: []openrouterapigo.MessageRequest{
-			{openrouterapigo.RoleUser, "Hi", "", ""},
+		Messages: []MessageRequest{
+			{RoleUser, "Hi", "", ""},
 		},
 	}
 
@@ -31,17 +29,17 @@ func TestFetchChatCompletions(t *testing.T) {
 }
 
 func TestFetchChatCompletionsStreaming(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
 
-	request := openrouterapigo.Request{
+	request := Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
-		Messages: []openrouterapigo.MessageRequest{
-			{openrouterapigo.RoleUser, "Hello", "", ""},
+		Messages: []MessageRequest{
+			{RoleUser, "Hello", "", ""},
 		},
 		Stream: true,
 	}
 
-	outputChan := make(chan openrouterapigo.Response)
+	outputChan := make(chan Response)
 	processingChan := make(chan interface{})
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,21 +69,21 @@ func TestFetchChatCompletionsStreaming(t *testing.T) {
 }
 
 func TestFetchChatCompletionsAgentStreaming(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
-	agent := openrouterapigo.NewRouterAgent(client, "meta-llama/llama-3.2-1b-instruct", openrouterapigo.RouterAgentConfig{
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := NewRouterAgent(client, "meta-llama/llama-3.2-1b-instruct", RouterAgentConfig{
 		Temperature: 0.7,
 		MaxTokens:   100,
 	})
 
-	outputChan := make(chan openrouterapigo.Response)
+	outputChan := make(chan Response)
 	processingChan := make(chan interface{})
 	errChan := make(chan error)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	chat := []openrouterapigo.MessageRequest{
-		{Role: openrouterapigo.RoleSystem, Content: "You are a helpful assistant."},
-		{Role: openrouterapigo.RoleUser, Content: "Hello"},
+	chat := []MessageRequest{
+		{Role: RoleSystem, Content: "You are a helpful assistant."},
+		{Role: RoleUser, Content: "Hello"},
 	}
 
 	go agent.ChatStream(chat, outputChan, processingChan, errChan, ctx)
@@ -112,8 +110,8 @@ func TestFetchChatCompletionsAgentStreaming(t *testing.T) {
 }
 
 func TestFetchChatCompletionsAgentSimpleChat(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
-	agent := openrouterapigo.NewRouterAgentChat(client, "meta-llama/llama-3.2-1b-instruct", openrouterapigo.RouterAgentConfig{
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := NewRouterAgentChat(client, "meta-llama/llama-3.2-1b-instruct", RouterAgentConfig{
 		Temperature: 0.0,
 		MaxTokens:   100,
 	}, "You are helpful asistant, answer in short worlds")
@@ -122,16 +120,14 @@ func TestFetchChatCompletionsAgentSimpleChat(t *testing.T) {
 	agent.Chat("What I asked you to rember?")
 
 	for _, msg := range agent.Messages {
-		content, ok := msg.Content.(string)
-		if ok {
-			t.Logf(string(msg.Role) + ": " + string(content))
-		}
+		//Assumption is that text is on index 0 and pdfs are on index 1..n
+		t.Logf(string(msg.GetRole()) + ": " + string(msg.GetContentPart()[0].Text))
 	}
 }
 
 func TestFetchChatCompletionsAgentSimpleChatWithImage(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
-	agent := openrouterapigo.NewRouterAgentChat(client, "google/gemma-3-27b-it" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, openrouterapigo.RouterAgentConfig{
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := NewRouterAgentChat(client, "google/gemma-3-27b-it" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, RouterAgentConfig{
 		Temperature: 0.0,
 		MaxTokens:   100,
 	}, "You are helpful asistant")
@@ -150,22 +146,14 @@ func TestFetchChatCompletionsAgentSimpleChatWithImage(t *testing.T) {
 	agent.ChatWithImage("What is in image?", img)
 
 	for _, msg := range agent.Messages {
-		content, ok := msg.Content.(string)
-		if ok {
-			t.Logf(string(msg.Role) + ": " + string(content))
-			continue
-		}
-		content1, ok := msg.Content.([]openrouterapigo.ContentPart)
-		if ok {
-			//Assumption is that text is on index 0 and image is on index 1..n
-			t.Logf(string(msg.Role) + ": " + string(content1[0].Text))
-		}
+		//Assumption is that text is on index 0 and pdfs are on index 1..n
+		t.Logf(string(msg.GetRole()) + ": " + string(msg.GetContentPart()[0].Text))
 	}
 }
 
 func TestFetchChatCompletionsAgentSimpleChatWithPDF(t *testing.T) {
-	client := openrouterapigo.NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
-	agent := openrouterapigo.NewRouterAgentChat(client, "google/gemma-3-27b-it" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, openrouterapigo.RouterAgentConfig{
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := NewRouterAgentChat(client, "google/gemma-3-27b-it" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, RouterAgentConfig{
 		Temperature: 0.0,
 		MaxTokens:   100,
 	}, "You are helpful asistant")
@@ -173,15 +161,40 @@ func TestFetchChatCompletionsAgentSimpleChatWithPDF(t *testing.T) {
 	agent.ChatWithPDF("What is in image?", path.Join("data_for_test", "tex_sample.pdf"))
 
 	for _, msg := range agent.Messages {
-		content, ok := msg.Content.(string)
-		if ok {
-			t.Logf(string(msg.Role) + ": " + string(content))
-			continue
-		}
-		content1, ok := msg.Content.([]openrouterapigo.ContentPart)
-		if ok {
-			//Assumption is that text is on index 0 and pdfs are on index 1..n
-			t.Logf(string(msg.Role) + ": " + string(content1[0].Text))
+		//Assumption is that text is on index 0 and pdfs are on index 1..n
+		t.Logf(string(msg.GetRole()) + ": " + string(msg.GetContentPart()[0].Text))
+	}
+}
+
+func TestFetchChatCompletionsAgentSimpleChatUsingTool(t *testing.T) {
+	client := NewOpenRouterClient(os.Getenv("OPENROUTER_API_KEY"))
+	agent := NewRouterAgentChat(client, "mistralai/ministral-8b" /*Select multimodal model https://openrouter.ai/docs/features/images-and-pdfs*/, RouterAgentConfig{
+		Temperature: 0.0,
+		MaxTokens:   100,
+	}, "You are helpful asistant")
+
+	type args struct {
+		A int `json:"FirstArgument" desc:"function returns this value"`
+	}
+	AddToolToAgent(&agent, ToolDefinition[args]{
+		Function: func(arg args) any {
+			return arg.A
+		},
+		Name:        "test_func",
+		Description: "function for testing if function calling is working, use when user ask for use any tool, returns input value",
+	})
+
+	err := agent.Chat("Use tool")
+	if err != nil {
+		t.Errorf("error while sending request: %s", err)
+	}
+
+	for _, msg := range agent.Messages {
+		//Assumption is that text is on index 0 and pdfs are on index 1..n
+		if msg.GetRole() == RoleTool {
+			t.Logf(string(msg.GetName()) + ": " + string(msg.GetContentPart()[0].Text))
+		} else {
+			t.Logf(string(msg.GetRole()) + ": " + string(msg.GetContentPart()[0].Text))
 		}
 	}
 }

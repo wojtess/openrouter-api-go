@@ -65,6 +65,43 @@ type MessageRequest struct {
 	ToolCallID string      `json:"tool_call_id,omitempty"`
 }
 
+func (req MessageRequest) GetRole() MessageRole {
+	return req.Role
+}
+
+func (req MessageRequest) GetContentPart() []ContentPart {
+	contentPart, ok := req.Content.([]ContentPart)
+	if ok {
+		return contentPart
+	}
+	contentString, ok := req.Content.(string)
+	if ok {
+		return []ContentPart{
+			{
+				Type: ContentTypeText,
+				Text: contentString,
+			},
+		}
+	}
+	panic("internal value of content is not string or []ContentPart") //TODO ensure that MessageRequest.Content is string or []ContentPart or makt it []ContentPart only and dont use string for safty
+}
+
+func (req MessageRequest) GetToolCalls() []ToolCall {
+	return nil
+}
+
+func (req MessageRequest) GetReasoning() string {
+	return ""
+}
+
+func (req MessageRequest) GetToolCallId() string {
+	return ""
+}
+
+func (req MessageRequest) GetName() string {
+	return req.Name
+}
+
 type MessageRole string
 
 const (
@@ -101,16 +138,53 @@ type ImageURL struct {
 	Detail string `json:"detail,omitempty"`
 }
 
+type FunctionParamType string
+
+const (
+	StringFunctionParamType  FunctionParamType = "string"
+	IntegerFunctionParamType FunctionParamType = "integer"
+	NumberFunctionParamType  FunctionParamType = "number"
+	BooleanFunctionParamType FunctionParamType = "boolean"
+	ArrayFunctionParamType   FunctionParamType = "array"
+	ObjectFunctionParamType  FunctionParamType = "object"
+)
+
+type FunctionParam struct {
+	Type        FunctionParamType        `json:"type"` // "string", "integer", "number", "boolean", "array", "object"
+	Description string                   `json:"description,omitempty"`
+	Enum        []string                 `json:"enum,omitempty"`
+	Items       *FunctionParamItems      `json:"items,omitempty"`
+	Properties  map[string]FunctionParam `json:"properties,omitempty"`
+}
+
+type FunctionParamItems struct {
+	Type string `json:"type"` // "string", "integer",
+}
+
+type FunctionParametersType string
+
+const DefaultFunctionParametersType FunctionParametersType = "object"
+
+type FunctionParameters struct {
+	Type       FunctionParametersType   `json:"type"`
+	Properties map[string]FunctionParam `json:"properties"`
+	Required   []string                 `json:"required,omitempty"`
+}
+
 // FunctionDescription represents the function description structure.
 type FunctionDescription struct {
-	Description string      `json:"description,omitempty"`
-	Name        string      `json:"name"`
-	Parameters  interface{} `json:"parameters"` // JSON Schema object
+	Description string                 `json:"description,omitempty"`
+	Name        string                 `json:"name"`
+	Parameters  map[string]interface{} `json:"parameters"`
 }
+
+type ToolType string
+
+const DefaultToolType ToolType = "function"
 
 // Tool represents the tool structure.
 type Tool struct {
-	Type     string              `json:"type"`
+	Type     ToolType            `json:"type"`
 	Function FunctionDescription `json:"function"`
 }
 
@@ -147,10 +221,39 @@ type Choice struct {
 }
 
 type MessageResponse struct {
-	Content   string     `json:"content"`
-	Role      string     `json:"role"`
-	Reasoning string     `json:"reasoning,omitempty"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Content   string      `json:"content"`
+	Role      MessageRole `json:"role"`
+	Reasoning string      `json:"reasoning,omitempty"`
+	ToolCalls []ToolCall  `json:"tool_calls,omitempty"`
+}
+
+func (res MessageResponse) GetRole() MessageRole {
+	return res.Role
+}
+
+func (res MessageResponse) GetContentPart() []ContentPart {
+	return []ContentPart{
+		{
+			Type: ContentTypeText,
+			Text: res.Content,
+		},
+	}
+}
+
+func (res MessageResponse) GetToolCalls() []ToolCall {
+	return res.ToolCalls
+}
+
+func (res MessageResponse) GetReasoning() string {
+	return res.Reasoning
+}
+
+func (res MessageResponse) GetToolCallId() string {
+	return ""
+}
+
+func (res MessageResponse) GetName() string {
+	return ""
 }
 
 type Delta struct {
@@ -167,7 +270,12 @@ type ErrorResponse struct {
 }
 
 type ToolCall struct {
-	ID       string      `json:"id"`
-	Type     string      `json:"type"`
-	Function interface{} `json:"function"`
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function ToolCallFunction `json:"function,omitempty"`
+}
+
+type ToolCallFunction struct {
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
 }
