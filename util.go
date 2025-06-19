@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"image"
 	"image/png"
-	"io/ioutil"
+	"os"
 )
 
 func encodeImageToBase64(img image.Image) (string, error) {
@@ -21,7 +21,7 @@ func encodeImageToBase64(img image.Image) (string, error) {
 }
 
 func encodePDFToBase64(pdfPath string) (string, error) {
-	data, err := ioutil.ReadFile(pdfPath)
+	data, err := os.ReadFile(pdfPath)
 	if err != nil {
 		return "", err
 	}
