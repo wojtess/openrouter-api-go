@@ -15,7 +15,7 @@ func TestFetchChatCompletions(t *testing.T) {
 	request := Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
 		Messages: []MessageRequest{
-			{RoleUser, "Hi", "", ""},
+			{RoleUser, "Hi", "", "", nil},
 		},
 	}
 
@@ -34,7 +34,7 @@ func TestFetchChatCompletionsStreaming(t *testing.T) {
 	request := Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
 		Messages: []MessageRequest{
-			{RoleUser, "Hello", "", ""},
+			{RoleUser, "Hello", "", "", nil},
 		},
 		Stream: true,
 	}
@@ -184,7 +184,7 @@ func TestFetchChatCompletionsAgentSimpleChatUsingTool(t *testing.T) {
 		Description: "function for testing if function calling is working, use when user ask for use any tool, returns input value",
 	})
 
-	err := agent.Chat("Use tool")
+	_, err := agent.Chat("Use tool")
 	if err != nil {
 		t.Errorf("error while sending request: %s", err)
 	}

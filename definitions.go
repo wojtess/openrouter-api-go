@@ -63,6 +63,7 @@ type MessageRequest struct {
 	Content    interface{} `json:"content"` // Can be string or []ContentPart
 	Name       string      `json:"name,omitempty"`
 	ToolCallID string      `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
 }
 
 func (req MessageRequest) GetRole() MessageRole {
@@ -87,7 +88,7 @@ func (req MessageRequest) GetContentPart() []ContentPart {
 }
 
 func (req MessageRequest) GetToolCalls() []ToolCall {
-	return nil
+	return req.ToolCalls
 }
 
 func (req MessageRequest) GetReasoning() string {
@@ -95,7 +96,7 @@ func (req MessageRequest) GetReasoning() string {
 }
 
 func (req MessageRequest) GetToolCallId() string {
-	return ""
+	return req.ToolCallID
 }
 
 func (req MessageRequest) GetName() string {
@@ -232,10 +233,14 @@ func (res MessageResponse) GetRole() MessageRole {
 }
 
 func (res MessageResponse) GetContentPart() []ContentPart {
+	content := res.Content
+	if content == "" {
+		content = " "
+	}
 	return []ContentPart{
 		{
 			Type: ContentTypeText,
-			Text: res.Content,
+			Text: content,
 		},
 	}
 }
