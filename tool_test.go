@@ -284,3 +284,39 @@ func TestToolWrapper_ReflectionSafety(t *testing.T) {
 		_ = reflect.ValueOf(42).Call(nil)
 	})
 }
+
+type fakeTool struct {
+	name    string
+	params  map[string]interface{}
+	callErr error
+}
+
+func (f fakeTool) Call(args json.RawMessage) (any, error) {
+	return nil, f.callErr
+}
+
+func (f fakeTool) Metadata() FunctionDescription {
+	return FunctionDescription{
+		Name:       f.name,
+		Parameters: f.params,
+	}
+}
+
+func TestToolRegistry_RegisterValidation(t *testing.T) {
+	reg := NewToolRegistry()
+
+	if err := reg.Register(fakeTool{name: "", params: map[string]interface{}{}}); err == nil {
+		t.Errorf("expected error for empty name")
+	}
+
+	if err := reg.Register(fakeTool{name: "dup", params: map[string]interface{}{}}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := reg.Register(fakeTool{name: "dup", params: map[string]interface{}{}}); err == nil {
+		t.Errorf("expected duplicate name error")
+	}
+
+	if err := reg.Register(fakeTool{name: "nilparams", params: nil}); err == nil {
+		t.Errorf("expected error for nil parameters schema")
+	}
+}

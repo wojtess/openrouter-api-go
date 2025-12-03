@@ -159,8 +159,19 @@ func NewToolRegistry() *ToolRegistry {
 	}
 }
 
-func (r *ToolRegistry) Register(tool ToolInterface) {
-	r.tools[tool.Metadata().Name] = tool
+func (r *ToolRegistry) Register(tool ToolInterface) error {
+	meta := tool.Metadata()
+	if meta.Name == "" {
+		return fmt.Errorf("tool name cannot be empty")
+	}
+	if meta.Parameters == nil {
+		return fmt.Errorf("tool %s has nil parameters schema", meta.Name)
+	}
+	if _, exists := r.tools[meta.Name]; exists {
+		return fmt.Errorf("tool %s already registered", meta.Name)
+	}
+	r.tools[meta.Name] = tool
+	return nil
 }
 
 func (r *ToolRegistry) GenerateTools() ([]Tool, error) {

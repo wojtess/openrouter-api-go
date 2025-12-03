@@ -176,15 +176,18 @@ func TestFetchChatCompletionsAgentSimpleChatUsingTool(t *testing.T) {
 	type args struct {
 		A int `json:"FirstArgument" desc:"function returns this value"`
 	}
-	AddToolToAgent(&agent, ToolDefinition[args]{
+	err := AddToolToAgent(&agent, ToolDefinition[args]{
 		Function: func(arg args) any {
 			return arg.A
 		},
 		Name:        "test_func",
 		Description: "function for testing if function calling is working, use when user ask for use any tool, returns input value",
 	})
+	if err != nil {
+		t.Fatalf("failed to register tool: %v", err)
+	}
 
-	_, err := agent.Chat("Use tool")
+	_, err = agent.Chat("Use tool")
 	if err != nil {
 		t.Errorf("error while sending request: %s", err)
 	}

@@ -187,8 +187,8 @@ func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAge
 	}
 }
 
-func AddToolToAgent[T any](agent *RouterAgentChat, definition ToolDefinition[T]) {
-	agent.ToolRegistry.Register(toolWrapper[T]{
+func AddToolToAgent[T any](agent *RouterAgentChat, definition ToolDefinition[T]) error {
+	return agent.ToolRegistry.Register(toolWrapper[T]{
 		definition: definition,
 	})
 }
