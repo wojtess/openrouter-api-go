@@ -182,6 +182,16 @@ func AddToolToAgent[T any](agent *RouterAgentChat, definition ToolDefinition[T])
 	})
 }
 
+func firstChoiceMessage(response *Response) (*MessageResponse, error) {
+	if response == nil || len(response.Choices) == 0 {
+		return nil, fmt.Errorf("empty choices in response")
+	}
+	if response.Choices[0].Message == nil {
+		return nil, fmt.Errorf("missing message in response")
+	}
+	return response.Choices[0].Message, nil
+}
+
 func generateMessagesForRequest(messages []message) []MessageRequest {
 	newMessages := make([]MessageRequest, 0, len(messages))
 	for _, msg := range messages {
@@ -206,9 +216,9 @@ func generateMessagesForRequest(messages []message) []MessageRequest {
 	return newMessages
 }
 
-func (agent *RouterAgentChat) callTools(response *Response) []message {
+func (agent *RouterAgentChat) callTools(toolCalls []ToolCall) ([]message, error) {
 	newMessages := make([]message, 0)
-	for _, tool := range response.Choices[0].Message.ToolCalls {
+	for _, tool := range toolCalls {
 		toolOutput, err := agent.ToolRegistry.CallTool(tool.Function.Name, json.RawMessage(tool.Function.Arguments))
 		type errorOutput struct {
 			Err string `json:"error"`
@@ -231,7 +241,7 @@ func (agent *RouterAgentChat) callTools(response *Response) []message {
 			Name:       tool.Function.Name,
 		})
 	}
-	return newMessages
+	return newMessages, nil
 }
 
 func (agent *RouterAgentChat) Chat(messageInput string) ([]message, error) {
@@ -274,10 +284,19 @@ func (agent *RouterAgentChat) Chat(messageInput string) ([]message, error) {
 			return nil, err
 		}
 
-		newMessages = append(newMessages, response.Choices[0].Message)
+		firstMsg, err := firstChoiceMessage(response)
+		if err != nil {
+			return nil, err
+		}
 
-		newMessages = append(newMessages, agent.callTools(response)...)
-		if len(response.Choices[0].Message.ToolCalls) == 0 {
+		newMessages = append(newMessages, firstMsg)
+
+		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		if err != nil {
+			return nil, err
+		}
+		newMessages = append(newMessages, toolMessages...)
+		if len(firstMsg.ToolCalls) == 0 {
 			break
 		}
 	}
@@ -347,10 +366,19 @@ func (agent *RouterAgentChat) ChatWithImage(messageString string, imgs ...image.
 			return nil, err
 		}
 
-		newMessages = append(newMessages, response.Choices[0].Message)
+		firstMsg, err := firstChoiceMessage(response)
+		if err != nil {
+			return nil, err
+		}
 
-		newMessages = append(newMessages, agent.callTools(response)...)
-		if len(response.Choices[0].Message.ToolCalls) == 0 {
+		newMessages = append(newMessages, firstMsg)
+
+		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		if err != nil {
+			return nil, err
+		}
+		newMessages = append(newMessages, toolMessages...)
+		if len(firstMsg.ToolCalls) == 0 {
 			break
 		}
 	}
@@ -420,10 +448,19 @@ func (agent *RouterAgentChat) ChatWithPDF(messageString string, pathsToPdf ...st
 			return nil, err
 		}
 
-		newMessages = append(newMessages, response.Choices[0].Message)
+		firstMsg, err := firstChoiceMessage(response)
+		if err != nil {
+			return nil, err
+		}
 
-		newMessages = append(newMessages, agent.callTools(response)...)
-		if len(response.Choices[0].Message.ToolCalls) == 0 {
+		newMessages = append(newMessages, firstMsg)
+
+		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		if err != nil {
+			return nil, err
+		}
+		newMessages = append(newMessages, toolMessages...)
+		if len(firstMsg.ToolCalls) == 0 {
 			break
 		}
 	}

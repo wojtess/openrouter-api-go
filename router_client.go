@@ -138,39 +138,39 @@ func (c *OpenRouterClient) FetchChatCompletionsStream(request Request, outputCha
 		}
 
 		reader := bufio.NewReader(resp.Body)
-			for {
-				select {
-				case <-ctx.Done():
-					errChan <- ctx.Err()
-					return
-				default:
-					line, err := reader.ReadString('\n')
-					line = strings.TrimSpace(line)
-					if strings.HasPrefix(line, ":") {
+		for {
+			select {
+			case <-ctx.Done():
+				errChan <- ctx.Err()
+				return
+			default:
+				line, err := reader.ReadString('\n')
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, ":") {
 					select {
 					case processingChan <- true:
 					case <-ctx.Done():
 						errChan <- ctx.Err()
 						return
 					}
-						continue
-					}
+					continue
+				}
 
-					if line != "" {
-						if !strings.HasPrefix(line, "data:") || len(line) < len("data:") {
-							errChan <- fmt.Errorf("unexpected response line: %q", line)
-							return
-						}
-						payload := strings.TrimSpace(line[len("data:"):])
-						if payload == "[DONE]" {
-							return
-						}
-						response := Response{}
-						err = json.Unmarshal([]byte(payload), &response)
-						if err != nil {
-							errChan <- err
-							return
-						}
+				if line != "" {
+					if !strings.HasPrefix(line, "data:") || len(line) < len("data:") {
+						errChan <- fmt.Errorf("unexpected response line: %q", line)
+						return
+					}
+					payload := strings.TrimSpace(line[len("data:"):])
+					if payload == "[DONE]" {
+						return
+					}
+					response := Response{}
+					err = json.Unmarshal([]byte(payload), &response)
+					if err != nil {
+						errChan <- err
+						return
+					}
 					select {
 					case outputChan <- response:
 					case <-ctx.Done():
