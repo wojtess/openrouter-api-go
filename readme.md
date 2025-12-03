@@ -90,6 +90,33 @@ func main() {
 
 ```
 
+### Streaming with Iterator Wrapper
+
+If you prefer iterating over events instead of managing channels directly, use the built-in wrapper:
+
+```go
+ctx, cancel := context.WithCancel(context.Background())
+defer cancel()
+
+stream := client.StartChatCompletionsStream(request, ctx)
+for {
+	ev, ok := stream.Recv(ctx)
+	if !ok {
+		break
+	}
+	if ev.Err != nil {
+		fmt.Printf("Error: %v\n", ev.Err)
+		break
+	}
+	if ev.Processing {
+		continue // heartbeat/processing signal
+	}
+	if ev.Response != nil && len(ev.Response.Choices) > 0 {
+		fmt.Print(ev.Response.Choices[0].Delta.Content)
+	}
+}
+```
+
 ### Router Agent
 
 The `router_agent.go` file introduces a `RouterAgent`.  The `RouterAgent` simplifies the API for processing requests, abstracting away the need to manage channels and context directly for streaming requests.

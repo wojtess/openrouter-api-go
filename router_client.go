@@ -190,3 +190,74 @@ func (c *OpenRouterClient) FetchChatCompletionsStream(request Request, outputCha
 		}
 	}()
 }
+
+type StreamEvent struct {
+	Response   *Response
+	Processing bool
+	Err        error
+}
+
+// ChatCompletionsStream wraps streaming channels into a pull-based iterator.
+type ChatCompletionsStream struct {
+	output     <-chan Response
+	processing <-chan interface{}
+	errs       <-chan error
+	done       bool
+}
+
+// Recv returns the next stream event. ok=false means the stream ended.
+// If an error is returned in the event, the stream is finished.
+func (s *ChatCompletionsStream) Recv(ctx context.Context) (StreamEvent, bool) {
+	if s.done {
+		return StreamEvent{}, false
+	}
+
+	for {
+		if s.output == nil && s.processing == nil && s.errs == nil {
+			s.done = true
+			return StreamEvent{}, false
+		}
+
+		select {
+		case resp, ok := <-s.output:
+			if !ok {
+				s.output = nil
+				continue
+			}
+			return StreamEvent{Response: &resp}, true
+		case _, ok := <-s.processing:
+			if !ok {
+				s.processing = nil
+				continue
+			}
+			return StreamEvent{Processing: true}, true
+		case err, ok := <-s.errs:
+			if !ok {
+				s.errs = nil
+				continue
+			}
+			s.errs = nil
+			s.done = true
+			if err != nil {
+				return StreamEvent{Err: err}, false
+			}
+			return StreamEvent{}, false
+		case <-ctx.Done():
+			s.done = true
+			return StreamEvent{Err: ctx.Err()}, false
+		}
+	}
+}
+
+// StartChatCompletionsStream starts a streaming request and returns an iterator-style wrapper.
+func (c *OpenRouterClient) StartChatCompletionsStream(request Request, ctx context.Context) *ChatCompletionsStream {
+	outputChan := make(chan Response)
+	processingChan := make(chan interface{})
+	errChan := make(chan error)
+	c.FetchChatCompletionsStream(request, outputChan, processingChan, errChan, ctx)
+	return &ChatCompletionsStream{
+		output:     outputChan,
+		processing: processingChan,
+		errs:       errChan,
+	}
+}
