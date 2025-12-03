@@ -60,7 +60,7 @@ type ProviderPreferences struct {
 // Message represents the message structure.
 type MessageRequest struct {
 	Role       MessageRole `json:"role"`
-	Content    interface{} `json:"content"` // Can be string or []ContentPart
+	Content    interface{} `json:"content,omitempty"` // Can be string or []ContentPart
 	Name       string      `json:"name,omitempty"`
 	ToolCallID string      `json:"tool_call_id,omitempty"`
 	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
@@ -84,7 +84,7 @@ func (req MessageRequest) GetContentPart() []ContentPart {
 			},
 		}
 	}
-	panic("internal value of content is not string or []ContentPart") //TODO ensure that MessageRequest.Content is string or []ContentPart or makt it []ContentPart only and dont use string for safty
+	return []ContentPart{}
 }
 
 func (req MessageRequest) GetToolCalls() []ToolCall {
@@ -233,14 +233,10 @@ func (res MessageResponse) GetRole() MessageRole {
 }
 
 func (res MessageResponse) GetContentPart() []ContentPart {
-	content := res.Content
-	if content == "" {
-		content = " "
-	}
 	return []ContentPart{
 		{
 			Type: ContentTypeText,
-			Text: content,
+			Text: res.Content,
 		},
 	}
 }

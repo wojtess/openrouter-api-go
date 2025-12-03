@@ -195,10 +195,23 @@ func firstChoiceMessage(response *Response) (*MessageResponse, error) {
 func generateMessagesForRequest(messages []message) []MessageRequest {
 	newMessages := make([]MessageRequest, 0, len(messages))
 	for _, msg := range messages {
+		parts := msg.GetContentPart()
+		// If we have only an empty text part and tool calls, omit content to satisfy API rule.
+		if len(parts) == 1 && parts[0].Text == "" && len(msg.GetToolCalls()) > 0 {
+			parts = nil
+		}
+
+		var content interface{}
+		if len(parts) == 1 {
+			content = parts[0].Text
+		} else if len(parts) > 1 {
+			content = parts
+		}
+
 		if msg.GetRole() == RoleTool || msg.GetRole() == RoleAssistant || msg.GetRole() == RoleSystem {
 			newMessages = append(newMessages, MessageRequest{
 				Role:       msg.GetRole(),
-				Content:    msg.GetContentPart()[0].Text,
+				Content:    content,
 				ToolCallID: msg.GetToolCallId(),
 				// Name:       msg.GetName(),
 				ToolCalls: msg.GetToolCalls(),
@@ -206,7 +219,7 @@ func generateMessagesForRequest(messages []message) []MessageRequest {
 		} else {
 			newMessages = append(newMessages, MessageRequest{
 				Role:       msg.GetRole(),
-				Content:    msg.GetContentPart(),
+				Content:    content,
 				ToolCallID: msg.GetToolCallId(),
 				// Name:       msg.GetName(),
 				ToolCalls: msg.GetToolCalls(),
