@@ -157,6 +157,16 @@ type RouterAgentChat struct {
 	RouterAgent
 	Messages     []message
 	ToolRegistry ToolRegistry
+	ChoiceSelector
+}
+
+type ChoiceSelector func([]Choice) (Choice, error)
+
+func defaultChoiceSelector(choices []Choice) (Choice, error) {
+	if len(choices) == 0 {
+		return Choice{}, fmt.Errorf("empty choices in response")
+	}
+	return choices[0], nil
 }
 
 func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAgentConfig, system_prompt string) RouterAgentChat {
@@ -172,7 +182,8 @@ func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAge
 				Content: TextContent(system_prompt),
 			},
 		},
-		ToolRegistry: *NewToolRegistry(),
+		ToolRegistry:   *NewToolRegistry(),
+		ChoiceSelector: defaultChoiceSelector,
 	}
 }
 
@@ -180,16 +191,6 @@ func AddToolToAgent[T any](agent *RouterAgentChat, definition ToolDefinition[T])
 	agent.ToolRegistry.Register(toolWrapper[T]{
 		definition: definition,
 	})
-}
-
-func firstChoiceMessage(response *Response) (*MessageResponse, error) {
-	if response == nil || len(response.Choices) == 0 {
-		return nil, fmt.Errorf("empty choices in response")
-	}
-	if response.Choices[0].Message == nil {
-		return nil, fmt.Errorf("missing message in response")
-	}
-	return response.Choices[0].Message, nil
 }
 
 func generateMessagesForRequest(messages []message) []MessageRequest {
@@ -290,19 +291,23 @@ func (agent *RouterAgentChat) Chat(messageInput string) ([]message, error) {
 			return nil, err
 		}
 
-		firstMsg, err := firstChoiceMessage(response)
+		selectedChoice, err := agent.ChoiceSelector(response.Choices)
 		if err != nil {
 			return nil, err
 		}
 
-		newMessages = append(newMessages, firstMsg)
+		if selectedChoice.Message == nil {
+			return nil, fmt.Errorf("missing message in selected choice")
+		}
 
-		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		newMessages = append(newMessages, selectedChoice.Message)
+
+		toolMessages, err := agent.callTools(selectedChoice.Message.ToolCalls)
 		if err != nil {
 			return nil, err
 		}
 		newMessages = append(newMessages, toolMessages...)
-		if len(firstMsg.ToolCalls) == 0 {
+		if len(selectedChoice.Message.ToolCalls) == 0 {
 			break
 		}
 	}
@@ -372,19 +377,23 @@ func (agent *RouterAgentChat) ChatWithImage(messageString string, imgs ...image.
 			return nil, err
 		}
 
-		firstMsg, err := firstChoiceMessage(response)
+		selectedChoice, err := agent.ChoiceSelector(response.Choices)
 		if err != nil {
 			return nil, err
 		}
 
-		newMessages = append(newMessages, firstMsg)
+		if selectedChoice.Message == nil {
+			return nil, fmt.Errorf("missing message in selected choice")
+		}
 
-		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		newMessages = append(newMessages, selectedChoice.Message)
+
+		toolMessages, err := agent.callTools(selectedChoice.Message.ToolCalls)
 		if err != nil {
 			return nil, err
 		}
 		newMessages = append(newMessages, toolMessages...)
-		if len(firstMsg.ToolCalls) == 0 {
+		if len(selectedChoice.Message.ToolCalls) == 0 {
 			break
 		}
 	}
@@ -454,19 +463,23 @@ func (agent *RouterAgentChat) ChatWithPDF(messageString string, pathsToPdf ...st
 			return nil, err
 		}
 
-		firstMsg, err := firstChoiceMessage(response)
+		selectedChoice, err := agent.ChoiceSelector(response.Choices)
 		if err != nil {
 			return nil, err
 		}
 
-		newMessages = append(newMessages, firstMsg)
+		if selectedChoice.Message == nil {
+			return nil, fmt.Errorf("missing message in selected choice")
+		}
 
-		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		newMessages = append(newMessages, selectedChoice.Message)
+
+		toolMessages, err := agent.callTools(selectedChoice.Message.ToolCalls)
 		if err != nil {
 			return nil, err
 		}
 		newMessages = append(newMessages, toolMessages...)
-		if len(firstMsg.ToolCalls) == 0 {
+		if len(selectedChoice.Message.ToolCalls) == 0 {
 			break
 		}
 	}

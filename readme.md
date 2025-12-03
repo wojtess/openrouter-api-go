@@ -111,6 +111,8 @@ agent := openrouterapigo.NewRouterAgentChat(client, "your-model", openrouterapig
 agent.Chat("First message")
 agent.Chat("Second message")
 // Access the conversation history via agent.Messages
+// You can also customize which choice to use:
+// agent.ChoiceSelector = func(choices []openrouterapigo.Choice) (openrouterapigo.Choice, error) { ... }
 ```
 
 ### Specifying Model

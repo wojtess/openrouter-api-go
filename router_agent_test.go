@@ -6,38 +6,21 @@ import (
 	"testing"
 )
 
-func TestFirstChoiceMessageErrors(t *testing.T) {
-	tests := []struct {
-		name     string
-		response *Response
-	}{
-		{
-			name:     "nil response",
-			response: nil,
-		},
-		{
-			name: "empty choices",
-			response: &Response{
-				Choices: []Choice{},
-			},
-		},
-		{
-			name: "nil message in first choice",
-			response: &Response{
-				Choices: []Choice{
-					{Message: nil},
-				},
-			},
-		},
+func TestChoiceSelector_Default(t *testing.T) {
+	selector := defaultChoiceSelector
+
+	_, err := selector([]Choice{})
+	if err == nil {
+		t.Fatal("expected error for empty choices")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			msg, err := firstChoiceMessage(tt.response)
-			if err == nil {
-				t.Fatalf("expected error, got nil (message=%v)", msg)
-			}
-		})
+	msg := &MessageResponse{Content: "hi"}
+	ch, err := selector([]Choice{{Message: msg}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ch.Message != msg {
+		t.Fatalf("expected first choice to be selected")
 	}
 }
 
