@@ -319,22 +319,9 @@ func (agent *RouterAgentChat) Chat(messageInput string) ([]message, error) {
 
 // https://openrouter.ai/docs/features/images-and-pdfs
 func (agent *RouterAgentChat) ChatWithImage(messageString string, imgs ...image.Image) ([]message, error) {
-	contentList := make([]ContentPart, 0, len(imgs)+1)
-	contentList = append(contentList, ContentPart{
-		Type: ContentTypeText,
-		Text: messageString,
-	})
-	for _, img := range imgs {
-		encodedImage, err := encodeImageToBase64(img)
-		contentList = append(contentList, ContentPart{
-			Type: ContentTypeImage,
-			ImageURL: &ImageURL{
-				URL: fmt.Sprintf("data:image/jpeg;base64,%s", encodedImage),
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
+	contentList, err := buildImageContent(messageString, imgs)
+	if err != nil {
+		return nil, err
 	}
 
 	newMessages := make([]message, 0)
@@ -404,23 +391,9 @@ func (agent *RouterAgentChat) ChatWithImage(messageString string, imgs ...image.
 }
 
 func (agent *RouterAgentChat) ChatWithPDF(messageString string, pathsToPdf ...string) ([]message, error) {
-	contentList := make([]ContentPart, 0, len(pathsToPdf)+1)
-	contentList = append(contentList, ContentPart{
-		Type: ContentTypeText,
-		Text: messageString,
-	})
-	for _, pdf_path := range pathsToPdf {
-		encodedPdf, err := encodePDFToBase64(pdf_path)
-		contentList = append(contentList, ContentPart{
-			Type: ContentTypePDF,
-			File: &FileURL{
-				Filename: pdf_path,
-				FileData: fmt.Sprintf("data:application/pdf;base64,%s", encodedPdf),
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
+	contentList, err := buildPDFContent(messageString, pathsToPdf)
+	if err != nil {
+		return nil, err
 	}
 
 	newMessages := make([]message, 0)
