@@ -15,7 +15,7 @@ func TestFetchChatCompletions(t *testing.T) {
 	request := Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
 		Messages: []MessageRequest{
-			{RoleUser, "Hi", "", "", nil},
+			{Role: RoleUser, Content: TextContent("Hi")},
 		},
 	}
 
@@ -34,7 +34,7 @@ func TestFetchChatCompletionsStreaming(t *testing.T) {
 	request := Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
 		Messages: []MessageRequest{
-			{RoleUser, "Hello", "", "", nil},
+			{Role: RoleUser, Content: TextContent("Hello")},
 		},
 		Stream: true,
 	}
@@ -82,8 +82,8 @@ func TestFetchChatCompletionsAgentStreaming(t *testing.T) {
 	defer cancel()
 
 	chat := []MessageRequest{
-		{Role: RoleSystem, Content: "You are a helpful assistant."},
-		{Role: RoleUser, Content: "Hello"},
+		{Role: RoleSystem, Content: TextContent("You are a helpful assistant.")},
+		{Role: RoleUser, Content: TextContent("Hello")},
 	}
 
 	go agent.ChatStream(chat, outputChan, processingChan, errChan, ctx)

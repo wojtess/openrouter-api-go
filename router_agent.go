@@ -169,7 +169,7 @@ func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAge
 		Messages: []message{
 			MessageRequest{
 				Role:    RoleSystem,
-				Content: system_prompt,
+				Content: TextContent(system_prompt),
 			},
 		},
 		ToolRegistry: *NewToolRegistry(),
@@ -201,17 +201,10 @@ func generateMessagesForRequest(messages []message) []MessageRequest {
 			parts = nil
 		}
 
-		var content interface{}
-		if len(parts) == 1 {
-			content = parts[0].Text
-		} else if len(parts) > 1 {
-			content = parts
-		}
-
 		if msg.GetRole() == RoleTool || msg.GetRole() == RoleAssistant || msg.GetRole() == RoleSystem {
 			newMessages = append(newMessages, MessageRequest{
 				Role:       msg.GetRole(),
-				Content:    content,
+				Content:    parts,
 				ToolCallID: msg.GetToolCallId(),
 				// Name:       msg.GetName(),
 				ToolCalls: msg.GetToolCalls(),
@@ -219,7 +212,7 @@ func generateMessagesForRequest(messages []message) []MessageRequest {
 		} else {
 			newMessages = append(newMessages, MessageRequest{
 				Role:       msg.GetRole(),
-				Content:    content,
+				Content:    parts,
 				ToolCallID: msg.GetToolCallId(),
 				// Name:       msg.GetName(),
 				ToolCalls: msg.GetToolCalls(),
@@ -261,7 +254,7 @@ func (agent *RouterAgentChat) Chat(messageInput string) ([]message, error) {
 	newMessages := make([]message, 0)
 	newMessages = append(newMessages, MessageRequest{
 		Role:    RoleUser,
-		Content: messageInput,
+		Content: TextContent(messageInput),
 	})
 	for {
 		tools, err := agent.ToolRegistry.GenerateTools()

@@ -57,13 +57,12 @@ type ProviderPreferences struct {
 	SiteName   string `json:"site_name,omitempty"`
 }
 
-// Message represents the message structure.
 type MessageRequest struct {
-	Role       MessageRole `json:"role"`
-	Content    interface{} `json:"content,omitempty"` // Can be string or []ContentPart
-	Name       string      `json:"name,omitempty"`
-	ToolCallID string      `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+	Role       MessageRole   `json:"role"`
+	Content    []ContentPart `json:"content,omitempty"`
+	Name       string        `json:"name,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall    `json:"tool_calls,omitempty"`
 }
 
 func (req MessageRequest) GetRole() MessageRole {
@@ -71,20 +70,7 @@ func (req MessageRequest) GetRole() MessageRole {
 }
 
 func (req MessageRequest) GetContentPart() []ContentPart {
-	contentPart, ok := req.Content.([]ContentPart)
-	if ok {
-		return contentPart
-	}
-	contentString, ok := req.Content.(string)
-	if ok {
-		return []ContentPart{
-			{
-				Type: ContentTypeText,
-				Text: contentString,
-			},
-		}
-	}
-	return []ContentPart{}
+	return req.Content
 }
 
 func (req MessageRequest) GetToolCalls() []ToolCall {
@@ -118,6 +104,16 @@ type ContentPart struct {
 	Text     string      `json:"text,omitempty"`
 	ImageURL *ImageURL   `json:"image_url,omitempty"`
 	File     *FileURL    `json:"file,omitempty"`
+}
+
+// TextContent creates a text-only content slice for convenience.
+func TextContent(text string) []ContentPart {
+	return []ContentPart{
+		{
+			Type: ContentTypeText,
+			Text: text,
+		},
+	}
 }
 
 type ContnetType string

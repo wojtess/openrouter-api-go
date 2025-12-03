@@ -25,7 +25,7 @@ func main() {
 
 	request := openrouterapigo.Request{
 		Messages: []openrouterapigo.MessageRequest{
-			{Role: openrouterapigo.RoleUser, Content: "Hello"},
+			{Role: openrouterapigo.RoleUser, Content: openrouterapigo.TextContent("Hello")},
 		},
 	}
 
@@ -57,7 +57,7 @@ func main() {
 	request := openrouterapigo.Request{
 		Model: "meta-llama/llama-3.2-1b-instruct",
 		Messages: []openrouterapigo.MessageRequest{
-			{Role: openrouterapigo.RoleUser, Content: "Hello"},
+			{Role: openrouterapigo.RoleUser, Content: openrouterapigo.TextContent("Hello")},
 		},
 		Stream: true, // Enable streaming
 	}
@@ -121,7 +121,7 @@ You can specify a specific model to use with the `Model` field in the `Request` 
 request := openrouterapigo.Request{
     Model: "google/flan-t5-xxl",
     Messages: []openrouterapigo.MessageRequest{
-        {Role: openrouterapigo.RoleUser, Content: "Translate 'Hello' to French."},
+        {Role: openrouterapigo.RoleUser, Content: openrouterapigo.TextContent("Translate 'Hello' to French.")},
     },
 }
 ```
