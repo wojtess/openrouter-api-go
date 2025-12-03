@@ -111,6 +111,8 @@ func (c *OpenRouterClient) FetchChatCompletionsStream(request Request, outputCha
 		return
 	}
 
+	req = req.WithContext(ctx)
+
 	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
@@ -140,9 +142,6 @@ func (c *OpenRouterClient) FetchChatCompletionsStream(request Request, outputCha
 			select {
 			case <-ctx.Done():
 				errChan <- ctx.Err()
-				close(errChan)
-				close(outputChan)
-				close(processingChan)
 				return
 			default:
 				line, err := reader.ReadString('\n')
@@ -158,11 +157,16 @@ func (c *OpenRouterClient) FetchChatCompletionsStream(request Request, outputCha
 				}
 
 				if line != "" {
-					if strings.Compare(line[6:], "[DONE]") == 0 {
+					if !strings.HasPrefix(line, "data:") || len(line) < len("data:") {
+						errChan <- fmt.Errorf("unexpected response line: %q", line)
+						return
+					}
+					payload := strings.TrimSpace(line[len("data:"):])
+					if payload == "[DONE]" {
 						return
 					}
 					response := Response{}
-					err = json.Unmarshal([]byte(line[6:]), &response)
+					err = json.Unmarshal([]byte(payload), &response)
 					if err != nil {
 						errChan <- err
 						return

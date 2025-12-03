@@ -2,6 +2,7 @@ package openrouterapigo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"image"
 )
@@ -143,9 +144,19 @@ func (agent RouterAgent) ChatStream(messages []MessageRequest, outputChan chan R
 	agent.client.FetchChatCompletionsStream(request, outputChan, processingChan, errChan, ctx)
 }
 
+type message interface {
+	GetRole() MessageRole
+	GetContentPart() []ContentPart
+	GetToolCalls() []ToolCall
+	GetReasoning() string
+	GetToolCallId() string
+	GetName() string
+}
+
 type RouterAgentChat struct {
 	RouterAgent
-	Messages []MessageRequest
+	Messages     []message
+	ToolRegistry ToolRegistry
 }
 
 func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAgentConfig, system_prompt string) RouterAgentChat {
@@ -155,64 +166,165 @@ func NewRouterAgentChat(client *OpenRouterClient, model string, config RouterAge
 			model:  model,
 			config: config,
 		},
-		Messages: []MessageRequest{
-			{
+		Messages: []message{
+			MessageRequest{
 				Role:    RoleSystem,
 				Content: system_prompt,
 			},
 		},
+		ToolRegistry: *NewToolRegistry(),
 	}
 }
 
-func (agent *RouterAgentChat) Chat(message string) error {
-	agent.Messages = append(agent.Messages, MessageRequest{
+func AddToolToAgent[T any](agent *RouterAgentChat, definition ToolDefinition[T]) {
+	agent.ToolRegistry.Register(toolWrapper[T]{
+		definition: definition,
+	})
+}
+
+func firstChoiceMessage(response *Response) (*MessageResponse, error) {
+	if response == nil || len(response.Choices) == 0 {
+		return nil, fmt.Errorf("empty choices in response")
+	}
+	if response.Choices[0].Message == nil {
+		return nil, fmt.Errorf("missing message in response")
+	}
+	return response.Choices[0].Message, nil
+}
+
+func generateMessagesForRequest(messages []message) []MessageRequest {
+	newMessages := make([]MessageRequest, 0, len(messages))
+	for _, msg := range messages {
+		parts := msg.GetContentPart()
+		// If we have only an empty text part and tool calls, omit content to satisfy API rule.
+		if len(parts) == 1 && parts[0].Text == "" && len(msg.GetToolCalls()) > 0 {
+			parts = nil
+		}
+
+		var content interface{}
+		if len(parts) == 1 {
+			content = parts[0].Text
+		} else if len(parts) > 1 {
+			content = parts
+		}
+
+		if msg.GetRole() == RoleTool || msg.GetRole() == RoleAssistant || msg.GetRole() == RoleSystem {
+			newMessages = append(newMessages, MessageRequest{
+				Role:       msg.GetRole(),
+				Content:    content,
+				ToolCallID: msg.GetToolCallId(),
+				// Name:       msg.GetName(),
+				ToolCalls: msg.GetToolCalls(),
+			})
+		} else {
+			newMessages = append(newMessages, MessageRequest{
+				Role:       msg.GetRole(),
+				Content:    content,
+				ToolCallID: msg.GetToolCallId(),
+				// Name:       msg.GetName(),
+				ToolCalls: msg.GetToolCalls(),
+			})
+		}
+	}
+	return newMessages
+}
+
+func (agent *RouterAgentChat) callTools(toolCalls []ToolCall) ([]message, error) {
+	newMessages := make([]message, 0)
+	for _, tool := range toolCalls {
+		toolOutput, err := agent.ToolRegistry.CallTool(tool.Function.Name, json.RawMessage(tool.Function.Arguments))
+		type errorOutput struct {
+			Err string `json:"error"`
+		}
+		if err != nil {
+			toolOutputByte, _ := json.Marshal(errorOutput{
+				Err: fmt.Sprintf("%s", err),
+			})
+			toolOutput = string(toolOutputByte)
+		}
+		newMessages = append(newMessages, MessageRequest{
+			Role: RoleTool,
+			Content: []ContentPart{
+				{
+					Type: ContentTypeText,
+					Text: toolOutput,
+				},
+			},
+			ToolCallID: tool.ID,
+			Name:       tool.Function.Name,
+		})
+	}
+	return newMessages, nil
+}
+
+func (agent *RouterAgentChat) Chat(messageInput string) ([]message, error) {
+	newMessages := make([]message, 0)
+	newMessages = append(newMessages, MessageRequest{
 		Role:    RoleUser,
-		Content: message,
+		Content: messageInput,
 	})
-	request := Request{
-		Messages:          agent.Messages,
-		Model:             agent.model,
-		ResponseFormat:    agent.config.ResponseFormat,
-		Stop:              agent.config.Stop,
-		MaxTokens:         agent.config.MaxTokens,
-		Temperature:       agent.config.Temperature,
-		Tools:             agent.config.Tools,
-		ToolChoice:        agent.config.ToolChoice,
-		Seed:              agent.config.Seed,
-		TopP:              agent.config.TopP,
-		TopK:              agent.config.TopK,
-		FrequencyPenalty:  agent.config.FrequencyPenalty,
-		PresencePenalty:   agent.config.PresencePenalty,
-		RepetitionPenalty: agent.config.RepetitionPenalty,
-		LogitBias:         agent.config.LogitBias,
-		TopLogprobs:       agent.config.TopLogprobs,
-		MinP:              agent.config.MinP,
-		TopA:              agent.config.TopA,
-		Stream:            false,
+	for {
+		tools, err := agent.ToolRegistry.GenerateTools()
+		if err != nil {
+			return nil, fmt.Errorf("error while generating tools: %s", err)
+		}
+
+		request := Request{
+			Messages:          append(generateMessagesForRequest(agent.Messages), generateMessagesForRequest(newMessages)...),
+			Model:             agent.model,
+			ResponseFormat:    agent.config.ResponseFormat,
+			Stop:              agent.config.Stop,
+			MaxTokens:         agent.config.MaxTokens,
+			Temperature:       agent.config.Temperature,
+			Tools:             tools,
+			ToolChoice:        agent.config.ToolChoice,
+			Seed:              agent.config.Seed,
+			TopP:              agent.config.TopP,
+			TopK:              agent.config.TopK,
+			FrequencyPenalty:  agent.config.FrequencyPenalty,
+			PresencePenalty:   agent.config.PresencePenalty,
+			RepetitionPenalty: agent.config.RepetitionPenalty,
+			LogitBias:         agent.config.LogitBias,
+			TopLogprobs:       agent.config.TopLogprobs,
+			MinP:              agent.config.MinP,
+			TopA:              agent.config.TopA,
+			Stream:            false,
+		}
+
+		response, err := agent.client.FetchChatCompletions(request)
+
+		if err != nil {
+			return nil, err
+		}
+
+		firstMsg, err := firstChoiceMessage(response)
+		if err != nil {
+			return nil, err
+		}
+
+		newMessages = append(newMessages, firstMsg)
+
+		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		if err != nil {
+			return nil, err
+		}
+		newMessages = append(newMessages, toolMessages...)
+		if len(firstMsg.ToolCalls) == 0 {
+			break
+		}
 	}
 
-	response, err := agent.client.FetchChatCompletions(request)
+	agent.Messages = append(agent.Messages, newMessages...)
 
-	if err != nil {
-		// rollback user message
-		agent.Messages = agent.Messages[:len(agent.Messages)-1]
-		return err
-	}
-
-	agent.Messages = append(agent.Messages, MessageRequest{
-		Role:    RoleAssistant,
-		Content: response.Choices[0].Message.Content,
-	})
-
-	return nil
+	return newMessages, nil
 }
 
 // https://openrouter.ai/docs/features/images-and-pdfs
-func (agent *RouterAgentChat) ChatWithImage(message string, imgs ...image.Image) error {
+func (agent *RouterAgentChat) ChatWithImage(messageString string, imgs ...image.Image) ([]message, error) {
 	contentList := make([]ContentPart, 0, len(imgs)+1)
 	contentList = append(contentList, ContentPart{
 		Type: ContentTypeText,
-		Text: message,
+		Text: messageString,
 	})
 	for _, img := range imgs {
 		encodedImage, err := encodeImageToBase64(img)
@@ -223,60 +335,77 @@ func (agent *RouterAgentChat) ChatWithImage(message string, imgs ...image.Image)
 			},
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	agent.Messages = append(
-		agent.Messages,
+	newMessages := make([]message, 0)
+	newMessages = append(newMessages,
 		MessageRequest{
 			Role:    RoleUser,
 			Content: contentList,
 		})
+	for {
+		tools, err := agent.ToolRegistry.GenerateTools()
+		if err != nil {
+			return nil, fmt.Errorf("error while generating tools: %s", err)
+		}
 
-	request := Request{
-		Messages:          agent.Messages,
-		Model:             agent.model,
-		ResponseFormat:    agent.config.ResponseFormat,
-		Stop:              agent.config.Stop,
-		MaxTokens:         agent.config.MaxTokens,
-		Temperature:       agent.config.Temperature,
-		Tools:             agent.config.Tools,
-		ToolChoice:        agent.config.ToolChoice,
-		Seed:              agent.config.Seed,
-		TopP:              agent.config.TopP,
-		TopK:              agent.config.TopK,
-		FrequencyPenalty:  agent.config.FrequencyPenalty,
-		PresencePenalty:   agent.config.PresencePenalty,
-		RepetitionPenalty: agent.config.RepetitionPenalty,
-		LogitBias:         agent.config.LogitBias,
-		TopLogprobs:       agent.config.TopLogprobs,
-		MinP:              agent.config.MinP,
-		TopA:              agent.config.TopA,
-		Stream:            false,
+		request := Request{
+			Messages:          append(generateMessagesForRequest(agent.Messages), generateMessagesForRequest(newMessages)...),
+			Model:             agent.model,
+			ResponseFormat:    agent.config.ResponseFormat,
+			Stop:              agent.config.Stop,
+			MaxTokens:         agent.config.MaxTokens,
+			Temperature:       agent.config.Temperature,
+			Tools:             tools,
+			ToolChoice:        agent.config.ToolChoice,
+			Seed:              agent.config.Seed,
+			TopP:              agent.config.TopP,
+			TopK:              agent.config.TopK,
+			FrequencyPenalty:  agent.config.FrequencyPenalty,
+			PresencePenalty:   agent.config.PresencePenalty,
+			RepetitionPenalty: agent.config.RepetitionPenalty,
+			LogitBias:         agent.config.LogitBias,
+			TopLogprobs:       agent.config.TopLogprobs,
+			MinP:              agent.config.MinP,
+			TopA:              agent.config.TopA,
+			Stream:            false,
+		}
+
+		response, err := agent.client.FetchChatCompletions(request)
+
+		if err != nil {
+			return nil, err
+		}
+
+		firstMsg, err := firstChoiceMessage(response)
+		if err != nil {
+			return nil, err
+		}
+
+		newMessages = append(newMessages, firstMsg)
+
+		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		if err != nil {
+			return nil, err
+		}
+		newMessages = append(newMessages, toolMessages...)
+		if len(firstMsg.ToolCalls) == 0 {
+			break
+		}
 	}
 
-	response, err := agent.client.FetchChatCompletions(request)
+	agent.Messages = append(agent.Messages, newMessages...)
 
-	if err != nil {
-		// rollback user message
-		agent.Messages = agent.Messages[:len(agent.Messages)-1]
-		return err
-	}
-
-	agent.Messages = append(agent.Messages, MessageRequest{
-		Role:    RoleAssistant,
-		Content: response.Choices[0].Message.Content,
-	})
-
-	return nil
+	return newMessages, nil
 }
 
-func (agent *RouterAgentChat) ChatWithPDF(message string, pathsToPdf ...string) error {
+func (agent *RouterAgentChat) ChatWithPDF(messageString string, pathsToPdf ...string) ([]message, error) {
 	contentList := make([]ContentPart, 0, len(pathsToPdf)+1)
 	contentList = append(contentList, ContentPart{
 		Type: ContentTypeText,
-		Text: message,
+		Text: messageString,
 	})
 	for _, pdf_path := range pathsToPdf {
 		encodedPdf, err := encodePDFToBase64(pdf_path)
@@ -288,51 +417,68 @@ func (agent *RouterAgentChat) ChatWithPDF(message string, pathsToPdf ...string) 
 			},
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
-	agent.Messages = append(
-		agent.Messages,
+	newMessages := make([]message, 0)
+	newMessages = append(newMessages,
 		MessageRequest{
 			Role:    RoleUser,
 			Content: contentList,
 		})
+	for {
+		tools, err := agent.ToolRegistry.GenerateTools()
+		if err != nil {
+			return nil, fmt.Errorf("error while generating tools: %s", err)
+		}
 
-	request := Request{
-		Messages:          agent.Messages,
-		Model:             agent.model,
-		ResponseFormat:    agent.config.ResponseFormat,
-		Stop:              agent.config.Stop,
-		MaxTokens:         agent.config.MaxTokens,
-		Temperature:       agent.config.Temperature,
-		Tools:             agent.config.Tools,
-		ToolChoice:        agent.config.ToolChoice,
-		Seed:              agent.config.Seed,
-		TopP:              agent.config.TopP,
-		TopK:              agent.config.TopK,
-		FrequencyPenalty:  agent.config.FrequencyPenalty,
-		PresencePenalty:   agent.config.PresencePenalty,
-		RepetitionPenalty: agent.config.RepetitionPenalty,
-		LogitBias:         agent.config.LogitBias,
-		TopLogprobs:       agent.config.TopLogprobs,
-		MinP:              agent.config.MinP,
-		TopA:              agent.config.TopA,
-		Stream:            false,
+		request := Request{
+			Messages:          append(generateMessagesForRequest(agent.Messages), generateMessagesForRequest(newMessages)...),
+			Model:             agent.model,
+			ResponseFormat:    agent.config.ResponseFormat,
+			Stop:              agent.config.Stop,
+			MaxTokens:         agent.config.MaxTokens,
+			Temperature:       agent.config.Temperature,
+			Tools:             tools,
+			ToolChoice:        agent.config.ToolChoice,
+			Seed:              agent.config.Seed,
+			TopP:              agent.config.TopP,
+			TopK:              agent.config.TopK,
+			FrequencyPenalty:  agent.config.FrequencyPenalty,
+			PresencePenalty:   agent.config.PresencePenalty,
+			RepetitionPenalty: agent.config.RepetitionPenalty,
+			LogitBias:         agent.config.LogitBias,
+			TopLogprobs:       agent.config.TopLogprobs,
+			MinP:              agent.config.MinP,
+			TopA:              agent.config.TopA,
+			Stream:            false,
+		}
+
+		response, err := agent.client.FetchChatCompletions(request)
+
+		if err != nil {
+			return nil, err
+		}
+
+		firstMsg, err := firstChoiceMessage(response)
+		if err != nil {
+			return nil, err
+		}
+
+		newMessages = append(newMessages, firstMsg)
+
+		toolMessages, err := agent.callTools(firstMsg.ToolCalls)
+		if err != nil {
+			return nil, err
+		}
+		newMessages = append(newMessages, toolMessages...)
+		if len(firstMsg.ToolCalls) == 0 {
+			break
+		}
 	}
 
-	response, err := agent.client.FetchChatCompletions(request)
+	agent.Messages = append(agent.Messages, newMessages...)
 
-	if err != nil {
-		// rollback user message
-		agent.Messages = agent.Messages[:len(agent.Messages)-1]
-		return err
-	}
-
-	agent.Messages = append(agent.Messages, MessageRequest{
-		Role:    RoleAssistant,
-		Content: response.Choices[0].Message.Content,
-	})
-
-	return nil
+	return newMessages, nil
 }
